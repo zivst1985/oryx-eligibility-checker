@@ -100,7 +100,7 @@ footer{margin-top:20px;font-size:12px;color:var(--muted);text-align:center}
 <section class="card">
   <h2><span class="step">3</span>Ask the customer</h2>
   <div class="row">
-    <div><label class="q" for="age">Age</label><input type="number" id="age" min="10" max="110" placeholder="years"></div>
+    <div><label class="q" for="age">Age</label><input type="number" id="age" min="10" max="110" placeholder="years"><div class="hint" id="ageNote" style="margin:4px 0 0"></div></div>
     <div><span class="q" style="display:block;font-size:14px;font-weight:600;margin-bottom:4px">Wears distance glasses all day?</span>
       <div class="seg"><label><input type="radio" name="allday" value="yes">Yes</label><label><input type="radio" name="allday" value="no">No</label><label><input type="radio" name="allday" value="na" checked>N/A</label></div></div>
     <div><span class="q" style="display:block;font-size:14px;font-weight:600;margin-bottom:4px">Takes them off to read?</span>
@@ -157,7 +157,7 @@ function evaluate(d){
   const stop=[], check=[], ok=[];
   const {age, sphR, sphL, cylR, cylL, add, allday, offread, flags} = d;
 
-  if(age==null) check.push('Age not entered');
+  if(age==null) check.push('Age is missing – it is not on the form, please ask the customer');
   else if(age<35) stop.push(`Age ${age} – under 35`);
   else if(age>60) check.push(`Age ${age} – over 60`);
 
@@ -225,6 +225,28 @@ function parseRx(raw){
   }
   if(adds.length) out.add=Math.max(...adds);
   return out;
+}
+
+/* ---------- age / date of birth from the form ---------- */
+function findAge(raw){
+  const text=raw.replace(/[−–—]/g,'-');
+  const now=new Date();
+  const toYear=y=>{y=+y; if(y<100) y+= (y>now.getFullYear()%100?1900:2000); return y;};
+  const dobRe=/(d\.?\s?o\.?\s?b\.?|date\s+of\s+birth|birth\s*date|birthday|born|תאריך\s+לידה|ת\.?\s?לידה)\s*[:#\-]?\s*(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{2,4})/i;
+  const m=text.match(dobRe);
+  if(m){
+    let a=+m[2],b=+m[3],y=toYear(m[4]);
+    let mo,d; if(a>12){d=a;mo=b;} else if(b>12){mo=a;d=b;} else {mo=a;d=b;}
+    if(y>1900 && y<=now.getFullYear() && mo>=1 && mo<=12){
+      let age=now.getFullYear()-y; if(now.getMonth()+1<mo || (now.getMonth()+1===mo && now.getDate()<d)) age--;
+      if(age>=10 && age<=110) return {age, src:'date of birth '+m[2]+'/'+m[3]+'/'+m[4]};
+    }
+  }
+  const yOnly=text.match(/(d\.?\s?o\.?\s?b\.?|date\s+of\s+birth|birth\s*(?:date|year)|year\s+of\s+birth|שנת\s+לידה)\s*[:#\-]?\s*((?:19|20)\d{2})\b/i);
+  if(yOnly){ const age=now.getFullYear()-(+yOnly[2]); if(age>=10&&age<=110) return {age, src:'year of birth '+yOnly[2]}; }
+  const am=text.match(/(?:\bage|גיל)\s*[:#\-]?\s*(\d{2,3})\b/i);
+  if(am && +am[1]>=10 && +am[1]<=110) return {age:+am[1], src:'age on the form'};
+  return null;
 }
 
 /* ---------- table-aware parsing (uses word positions) ---------- */
@@ -362,6 +384,9 @@ async function handleFile(file){
     prog.hidden=true;
     $('ocr').textContent=results.map(r=>r.data.text.trim()).join('\n\n---\n\n')||'(no text found)';
     const rx=bestRx(results);
+    const ag=findAge(results.map(r=>r.data.text).join('\n'));
+    if(ag){ $('age').value=ag.age; $('ageNote').textContent='Filled from the '+ag.src+' – please check.'; }
+    else if($('age').value.trim()===''){ $('ageNote').textContent='Age was not found on the form – please ask the customer.'; }
     const fields={sphR:'sphR',sphL:'sphL',cylR:'cylR',cylL:'cylL',add:'add'};
     let found=0;
     for(const k in fields){ const el=$(fields[k]); if(k in rx){ el.value=rx[k]==null?'':fmt(rx[k]); found++; } }
@@ -401,7 +426,7 @@ $('go').addEventListener('click',()=>{
 });
 $('reset').addEventListener('click',()=>{location.reload();});
 
-window.__oryx={evaluate,parseRx,parseLayout,num};
+window.__oryx={evaluate,parseRx,parseLayout,findAge,num};
 </script>
 </body>
 </html>
