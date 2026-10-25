@@ -183,8 +183,11 @@ function evaluate(d){
     check.push(`${eye} SPH ${fmt(s)} not worn all day, SPH + ADD = ${fmt(s+addv)} (above +1.75)`);
   }
 
+  // Astigmatism above 0.50 matters only when it is not corrected, i.e. the glasses are not worn
   for(const [eye,c] of [['Right',cylR],['Left',cylL]]){
-    if(c!=null && Math.abs(c) > 0.50) check.push(`${eye} CYL ${fmt(c)} – above 0.50`);
+    if(c==null || Math.abs(c) <= 0.50 || allday==='yes') continue;
+    if(allday==='no') check.push(`${eye} CYL ${fmt(c)} – above 0.50 and the glasses are not worn all day`);
+    else check.push(`${eye} CYL ${fmt(c)} – above 0.50: ask whether they wear their distance glasses all day (if yes, this is fine)`);
   }
   if(add!=null && add >= 2.00) check.push(`ADD ${fmt(add)} – +2.00 or higher`);
   if(sphR!=null || sphL!=null){
