@@ -201,7 +201,7 @@ function evaluate(d){
 function parseRx(raw){
   const text=raw.replace(/[−–—]/g,'-').replace(/(\d),(\d{2})/g,'$1.$2').replace(/(^|[^\w.])0\s*\.?\s*([SD])\b/g,'$1O$2').replace(/\bO\s*\.?\s*D\s*\.?/gi,'OD').replace(/\bO\s*\.?\s*S\s*\.?/gi,'OS');
   const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const dec=/([+-]?\s?\d{1,2}\.\d{2})|\b(pl(?:ano)?)\b/gi;
+  const dec=/([+-]?\s?\d{1,2}\.\d{1,2})(?!\d)|\b(pl(?:ano)?)\b/gi;
   const nums=l=>[...l.matchAll(dec)].map(m=>m[2]?0:parseFloat(m[1].replace(/\s/g,'')));
   const out={};
   const rRe=/(^|[^a-z])(od|r|re|rt|right|ימין)([^a-z]|$)/i, lRe=/(^|[^a-z])(os|l|le|lt|left|שמאל)([^a-z]|$)/i;
@@ -244,8 +244,17 @@ function findAge(raw){
   }
   const yOnly=text.match(/(d\.?\s?o\.?\s?b\.?|date\s+of\s+birth|birth\s*(?:date|year)|year\s+of\s+birth|שנת\s+לידה)\s*[:#\-]?\s*((?:19|20)\d{2})\b/i);
   if(yOnly){ const age=now.getFullYear()-(+yOnly[2]); if(age>=10&&age<=110) return {age, src:'year of birth '+yOnly[2]}; }
-  const am=text.match(/(?:\bage|גיל)\s*[:#\-]?\s*(\d{2,3})\b/i);
-  if(am && +am[1]>=10 && +am[1]<=110) return {age:+am[1], src:'age on the form'};
+  const am=text.match(/(?:\bage|גיל)\s*[:#\-]?\s*(\d{2,3})\b/i) || text.match(/\b(\d{2,3})\s*(?:years?|yrs?)[\s\-]*old\b/i) || text.match(/\b(\d{2,3})\s*(?:y\/o|y\.o\.?|yo)\b/i) || text.match(/\bבן\s+(\d{2,3})|בת\s+(\d{2,3})/);
+  if(am){ const v=+(am[1]||am[2]); if(v>=10 && v<=110) return {age:v, src:'age written on the form'}; }
+  const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const ageFrom=(y,mo,d)=>{let a=now.getFullYear()-y; if(now.getMonth()+1<mo||(now.getMonth()+1===mo&&now.getDate()<d)) a--; return a;};
+  const cands=[];
+  for(const x of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+((?:19|20)\d{2})\b/gi)) cands.push([+x[3],MON[x[1].toLowerCase()],+x[2],x[0]]);
+  for(const x of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+((?:19|20)\d{2})\b/gi)) cands.push([+x[3],MON[x[2].toLowerCase()],+x[1],x[0]]);
+  for(const x of text.matchAll(/\b(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*((?:19|20)\d{2})\b/g)){ const a=+x[1],b=+x[2]; const mo=a>12?b:a, d=a>12?a:b; cands.push([+x[3],mo,d,x[0]]); }
+  const dobMon=text.match(/(d\.?\s?o\.?\s?b\.?|date\s+of\s+birth|birth\s*date|born)\s*[:#\-]?\s*([a-z]{3,9}\.?\s+\d{1,2},?\s+(?:19|20)\d{2}|\d{1,2}\s+[a-z]{3,9}\.?,?\s+(?:19|20)\d{2})/i);
+  const ordered=dobMon?cands.sort((p,q)=>(dobMon[2].includes(q[3])?1:0)-(dobMon[2].includes(p[3])?1:0)):cands;
+  for(const [y,mo,d,src] of ordered){ const a=ageFrom(y,mo,d); if(a>=18 && a<=105) return {age:a, src:'date '+src.trim()}; }
   return null;
 }
 
@@ -384,13 +393,19 @@ async function handleFile(file){
     prog.hidden=true;
     $('ocr').textContent=results.map(r=>r.data.text.trim()).join('\n\n---\n\n')||'(no text found)';
     const rx=bestRx(results);
+    const allText=results.map(r=>r.data.text).join('\n');
+    const auto=[];
+    const tick=(re,key,label)=>{ if(re.test(allText)){ const cb=document.querySelector('.checks input[data-r="'+key+'"]'); if(cb&&!cb.checked){cb.checked=true;auto.push(label);} } };
+    tick(/multi\s*-?\s*focal|progressive|bifocal|varifocal|varilux/i,'Progressive, bifocal or multifocal lenses','multifocal / progressive lenses');
+    tick(/mono\s*-?\s*vision/i,'Monovision','monovision');
+    if(auto.length){ document.querySelector('.checks').closest('details').open=true; }
     const ag=findAge(results.map(r=>r.data.text).join('\n'));
     if(ag){ $('age').value=ag.age; $('ageNote').textContent='Filled from the '+ag.src+' – please check.'; }
     else if($('age').value.trim()===''){ $('ageNote').textContent='Age was not found on the form – please ask the customer.'; }
     const fields={sphR:'sphR',sphL:'sphL',cylR:'cylR',cylL:'cylL',add:'add'};
     let found=0;
     for(const k in fields){ const el=$(fields[k]); if(k in rx){ el.value=rx[k]==null?'':fmt(rx[k]); found++; } }
-    status(found ? `Found ${found} value${found>1?'s':''}. Please check them against the prescription in step 2.` : 'Could not find the numbers automatically – please type them in step 2.', !found);
+    status((found ? `Found ${found} value${found>1?'s':''}. Please check them against the prescription in step 2.` : 'Could not find the numbers automatically – please type them in step 2.')+(auto.length?' The form mentions '+auto.join(' and ')+' – ticked in step 3.':''), !found);
   }catch(e){
     prog.hidden=true;
     status((e&&e.message)||'Could not read this file – please type the values in step 2.', true);
