@@ -199,7 +199,7 @@ function evaluate(d){
 
 /* ---------- prescription text parsing ---------- */
 function parseRx(raw){
-  const text=raw.replace(/[−–—]/g,'-').replace(/(\d),(\d{2})/g,'$1.$2').replace(/(^|[^\w.])0\s*\.?\s*([SD])\b/g,'$1O$2').replace(/\bO\s*\.?\s*D\s*\.?/gi,'OD').replace(/\bO\s*\.?\s*S\s*\.?/gi,'OS');
+  const text=raw.replace(/[−–—]/g,'-').replace(/(\d),(\d{2})/g,'$1.$2').replace(/(^|\s)(\d{1,2}\.\d{2})-(?=\s|$)/gm,'$1-$2').replace(/(^|[^\w.])0\s*\.?\s*([SD])\b/g,'$1O$2').replace(/\bO\s*\.?\s*D\s*\.?/gi,'OD').replace(/\bO\s*\.?\s*S\s*\.?/gi,'OS');
   const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   const dec=/([+-]?\s?\d{1,2}\.\d{1,2})(?!\d)|\b(pl(?:ano)?)\b/gi;
   const nums=l=>[...l.matchAll(dec)].map(m=>m[2]?0:parseFloat(m[1].replace(/\s/g,'')));
@@ -244,7 +244,7 @@ function findAge(raw){
   }
   const yOnly=text.match(/(d\.?\s?o\.?\s?b\.?|date\s+of\s+birth|birth\s*(?:date|year)|year\s+of\s+birth|שנת\s+לידה)\s*[:#\-]?\s*((?:19|20)\d{2})\b/i);
   if(yOnly){ const age=now.getFullYear()-(+yOnly[2]); if(age>=10&&age<=110) return {age, src:'year of birth '+yOnly[2]}; }
-  const am=text.match(/(?:\bage|גיל)\s*[:#\-]?\s*(\d{2,3})\b/i) || text.match(/\b(\d{2,3})\s*(?:years?|yrs?)[\s\-]*old\b/i) || text.match(/\b(\d{2,3})\s*(?:y\/o|y\.o\.?|yo)\b/i) || text.match(/\bבן\s+(\d{2,3})|בת\s+(\d{2,3})/);
+  const am=text.match(/(?:\bage|גיל)\s*[:#\-]?\s*(\d{2,3})\b/i) || text.match(/\b(\d{2,3})\s*(?:years?|yrs?)[\s\-]*old\b/i) || text.match(/\b(\d{2,3})\s*(?:y\/o|y\.o\.?|yo)\b/i) || text.match(/(?:בן|בת)\s+(\d{2,3})|(\d{2,3})\s*(?::\s*)?(?:גיל|שנים|שנה)/);
   if(am){ const v=+(am[1]||am[2]); if(v>=10 && v<=110) return {age:v, src:'age written on the form'}; }
   const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
   const ageFrom=(y,mo,d)=>{let a=now.getFullYear()-y; if(now.getMonth()+1<mo||(now.getMonth()+1===mo&&now.getDate()<d)) a--; return a;};
@@ -361,14 +361,23 @@ async function fileToCanvases(file){
   return [c];
 }
 
-let worker=null;
+let worker=null, hebWorker=null;
+async function getHebWorker(){
+  if(hebWorker) return hebWorker;
+  hebWorker=await Tesseract.createWorker('heb',1,{
+    workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+    corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1'
+  });
+  return hebWorker;
+}
+// Hebrew text can come out in visual order; try each line as-is and reversed
+const withReversed=t=>t+'\n'+t.replace(/[\u05D0-\u05EA]+/g,w=>[...w].reverse().join(''));
 async function getWorker(){
   if(worker) return worker;
   if(!window.Tesseract) throw new Error('Text reader did not load – check the internet connection.');
   worker=await Tesseract.createWorker('eng',1,{
     workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
     corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
-    langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
     logger:m=>{ if(m.status==='recognizing text'){prog.hidden=false;prog.value=m.progress;} }
   });
   return worker;
@@ -399,12 +408,23 @@ async function handleFile(file){
     tick(/multi\s*-?\s*focal|progressive|bifocal|varifocal|varilux/i,'Progressive, bifocal or multifocal lenses','multifocal / progressive lenses');
     tick(/mono\s*-?\s*vision/i,'Monovision','monovision');
     if(auto.length){ document.querySelector('.checks').closest('details').open=true; }
-    const ag=findAge(results.map(r=>r.data.text).join('\n'));
+    let ag=findAge(results.map(r=>r.data.text).join('\n'));
+    if(!ag){
+      try{
+        status('Looking for the age in Hebrew…');
+        const hw=await getHebWorker(); let ht='';
+        for(const c of canvases){ ht+=(await hw.recognize(cleanCanvas(c))).data.text+'\n'; }
+        ag=findAge(withReversed(ht));
+        $('ocr').textContent+='\n\n--- (Hebrew) ---\n\n'+ht.trim();
+      }catch(e){}
+    }
     if(ag){ $('age').value=ag.age; $('ageNote').textContent='Filled from the '+ag.src+' – please check.'; }
     else if($('age').value.trim()===''){ $('ageNote').textContent='Age was not found on the form – please ask the customer.'; }
     const fields={sphR:'sphR',sphL:'sphL',cylR:'cylR',cylL:'cylL',add:'add'};
     let found=0;
     for(const k in fields){ const el=$(fields[k]); if(k in rx){ el.value=rx[k]==null?'':fmt(rx[k]); found++; } }
+    const conf=Math.max(...results.map(r=>r.data.confidence||0));
+    if(!found && conf<60){ status('This looks handwritten or unclear. The reader works on printed prescriptions only – please type the numbers in step 2, using the photo above.', true); return; }
     status((found ? `Found ${found} value${found>1?'s':''}. Please check them against the prescription in step 2.` : 'Could not find the numbers automatically – please type them in step 2.')+(auto.length?' The form mentions '+auto.join(' and ')+' – ticked in step 3.':''), !found);
   }catch(e){
     prog.hidden=true;
