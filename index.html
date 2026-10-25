@@ -370,6 +370,20 @@ async function getHebWorker(){
   });
   return hebWorker;
 }
+// Hebrew label found by the Hebrew reader + the number next to it read by the (more reliable) English reader
+function hebAgeByPosition(hebData, hebW, engList){
+  const hw=(hebData.words||[]).filter(w=>/^[:\s]*(גיל|ליג|גיל:|בן|ןב|בת|תב|ב)[:\s]*$/.test(w.text));
+  const nums=[];
+  for(const e of engList){ const f=hebW/e.w; for(const w of (e.data.words||[])){ const t=w.text.replace(/[^\d]/g,''); if(/^\d{2,3}$/.test(t)&&+t>=10&&+t<=110) nums.push({t,b:{x0:w.bbox.x0*f,x1:w.bbox.x1*f,y0:w.bbox.y0*f,y1:w.bbox.y1*f}}); } }
+  for(const h of hw){
+    const cy=(h.bbox.y0+h.bbox.y1)/2, hh=h.bbox.y1-h.bbox.y0;
+    let best=null,bd=1e9;
+    for(const o of nums){ const oy=(o.b.y0+o.b.y1)/2; if(Math.abs(oy-cy)>hh) continue;
+      const dx=Math.max(0,Math.min(Math.abs(o.b.x0-h.bbox.x1),Math.abs(h.bbox.x0-o.b.x1))); if(dx<bd){bd=dx;best=o;} }
+    if(best && bd<hh*8) return {age:+best.t, src:'age written in Hebrew on the form'};
+  }
+  return null;
+}
 // Hebrew text can come out in visual order; try each line as-is and reversed
 const withReversed=t=>t+'\n'+t.replace(/[\u05D0-\u05EA]+/g,w=>[...w].reverse().join(''));
 async function getWorker(){
@@ -394,10 +408,12 @@ async function handleFile(file){
     status('Reading the prescription… (the first time takes a few seconds)');
     const w=await getWorker();
     const results=[];
-    for(const c of canvases){
-      const r1=await w.recognize(cleanCanvas(c)); results.push(r1);
+    for(let pi=0;pi<canvases.length;pi++){
+      const c=canvases[pi];
+      const cc=cleanCanvas(c);
+      const r1=await w.recognize(cc); r1.__page=pi; r1.__w=cc.width; results.push(r1);
       const quick=bestRx([r1]);
-      if(!(quick.sphR!=null&&quick.sphL!=null)) results.push(await w.recognize(c));
+      if(!(quick.sphR!=null&&quick.sphL!=null)){ const r2=await w.recognize(c); r2.__page=pi; r2.__w=c.width; results.push(r2); }
     }
     prog.hidden=true;
     $('ocr').textContent=results.map(r=>r.data.text.trim()).join('\n\n---\n\n')||'(no text found)';
@@ -413,8 +429,16 @@ async function handleFile(file){
       try{
         status('Looking for the age in Hebrew…');
         const hw=await getHebWorker(); let ht='';
-        for(const c of canvases){ ht+=(await hw.recognize(cleanCanvas(c))).data.text+'\n'; }
-        ag=findAge(withReversed(ht));
+        for(let i=0;i<canvases.length;i++){
+          const hc=cleanCanvas(canvases[i]);
+          const hr=await hw.recognize(hc); ht+=hr.data.text+'\n';
+          if(!ag){
+            const eng=results.filter(r=>r.__page===i).map(r=>({data:r.data,w:r.__w}));
+            if(!eng.some(e=>e.w===canvases[i].width)) eng.push({data:(await w.recognize(canvases[i])).data,w:canvases[i].width});
+            ag=hebAgeByPosition(hr.data, hc.width, eng);
+          }
+        }
+        if(!ag) ag=findAge(withReversed(ht));
         $('ocr').textContent+='\n\n--- (Hebrew) ---\n\n'+ht.trim();
       }catch(e){}
     }
