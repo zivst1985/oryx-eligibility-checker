@@ -1,0 +1,327 @@
+HELLO
+<b>x</b>  y<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oryx Eligibility Checker</title>
+<meta name="description" content="Upload a glasses prescription and check whether a customer is suitable for Oryx near vision training.">
+<style>
+:root{
+  --bg:#f5f7fa;--card:#fff;--ink:#1d2733;--muted:#5b6776;--line:#dde3ea;--brand:#1f3a5f;--brand-2:#2f5d8f;
+  --ok:#2e7d32;--ok-bg:#e3f2e6;--warn:#a86a12;--warn-bg:#fff4d6;--bad:#c62828;--bad-bg:#fbe3e1;--focus:#2f5d8f;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#11161d;--card:#1a212b;--ink:#e6ebf1;--muted:#9aa6b4;--line:#2c3643;--brand:#8fb4e3;--brand-2:#a9c6ec;
+  --ok:#7cc884;--ok-bg:#16301b;--warn:#f0c062;--warn-bg:#3a2e12;--bad:#f08a84;--bad-bg:#3a1a19;--focus:#8fb4e3;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+main{max-width:760px;margin:0 auto;padding:20px 16px 48px}
+header h1{margin:0;font-size:24px;color:var(--brand)}
+header p{margin:4px 0 0;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+.card h2{margin:0 0 4px;font-size:17px}
+.step{display:inline-block;background:var(--brand);color:var(--card);border-radius:999px;width:22px;height:22px;text-align:center;font-size:13px;line-height:22px;margin-right:8px}
+.hint{color:var(--muted);font-size:13px;margin:0 0 12px}
+.drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:border-color .15s}
+.drop:hover,.drop.over{border-color:var(--brand-2)}
+.drop input{display:none}
+.drop strong{color:var(--brand-2)}
+#preview{margin-top:12px;display:none}
+#preview img,#preview canvas{max-width:100%;max-height:340px;border:1px solid var(--line);border-radius:8px;display:block;margin:0 auto}
+.status{margin-top:10px;font-size:14px;color:var(--muted)}
+.status.err{color:var(--bad)}
+progress{width:100%;height:6px;margin-top:6px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:6px 4px;text-align:left}
+th{font-size:13px;color:var(--muted);font-weight:600}
+input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+input:focus,select:focus,button:focus-visible,.drop:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:560px){.row{grid-template-columns:1fr 1fr 1fr}}
+label.q{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg label{border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:14px}
+.seg input{margin-right:4px}
+details{margin-top:14px}
+summary{cursor:pointer;font-weight:600}
+.checks{display:grid;gap:6px;margin-top:10px}
+.checks label{font-size:14px}
+.checks .tag{font-size:11px;font-weight:700;border-radius:4px;padding:1px 5px;margin-left:6px}
+.tag.stop{background:var(--bad-bg);color:var(--bad)}
+.tag.check{background:var(--warn-bg);color:var(--warn)}
+button.primary{margin-top:16px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--brand);color:var(--card);font:600 16px system-ui,Arial,sans-serif;cursor:pointer}
+button.link{background:none;border:0;color:var(--brand-2);cursor:pointer;padding:0;font:inherit;text-decoration:underline}
+#result{display:none}
+#result.ok{background:var(--ok-bg);border-color:var(--ok)}
+#result.check{background:var(--warn-bg);border-color:var(--warn)}
+#result.bad{background:var(--bad-bg);border-color:var(--bad)}
+#verdict{font-size:22px;font-weight:700;margin:0}
+#result.ok #verdict{color:var(--ok)}#result.check #verdict{color:var(--warn)}#result.bad #verdict{color:var(--bad)}
+#reasons{margin:8px 0 0;padding-left:20px}
+#reminder{margin-top:10px;font-size:14px}
+pre{white-space:pre-wrap;font-size:12px;background:var(--bg);padding:8px;border-radius:6px;max-height:200px;overflow:auto}
+footer{margin-top:20px;font-size:12px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Oryx Eligibility Checker</h1>
+  <p>Upload the customer’s glasses prescription, check the numbers, answer 3 questions, and get the result.</p>
+</header>
+
+<section class="card">
+  <h2><span class="step">1</span>Upload the prescription</h2>
+  <p class="hint">PDF, JPG, PNG, GIF, WEBP or BMP. The file is read on this device only – nothing is uploaded.</p>
+  <label class="drop" id="drop" tabindex="0">
+    <input type="file" id="file" accept="image/*,application/pdf,.pdf">
+    <div><strong>Choose a file</strong> or drop it here</div>
+  </label>
+  <div id="preview"></div>
+  <div class="status" id="status" role="status"></div>
+  <progress id="prog" max="1" value="0" hidden></progress>
+</section>
+
+<section class="card">
+  <h2><span class="step">2</span>Check the prescription values</h2>
+  <p class="hint">Filled in automatically when possible – always compare with the prescription and correct if needed. Leave empty if there is no value (e.g. no CYL).</p>
+  <table>
+    <thead><tr><th></th><th>SPH</th><th>CYL</th><th>ADD</th></tr></thead>
+    <tbody>
+      <tr><th>Right (OD)</th><td><input type="text" inputmode="decimal" id="sphR" placeholder="e.g. −2.25"></td><td><input type="text" inputmode="decimal" id="cylR" placeholder="—"></td><td rowspan="2" style="vertical-align:middle"><input type="text" inputmode="decimal" id="add" placeholder="e.g. +1.50"></td></tr>
+      <tr><th>Left (OS)</th><td><input type="text" inputmode="decimal" id="sphL"></td><td><input type="text" inputmode="decimal" id="cylL" placeholder="—"></td></tr>
+    </tbody>
+  </table>
+  <p class="hint" style="margin-top:8px">No prescription for distance? Leave SPH empty. No prescription at all? Enter the number on their reading glasses as ADD.</p>
+  <details><summary>Show the text read from the file</summary><pre id="ocr">Nothing read yet.</pre></details>
+</section>
+
+<section class="card">
+  <h2><span class="step">3</span>Ask the customer</h2>
+  <div class="row">
+    <div><label class="q" for="age">Age</label><input type="number" id="age" min="10" max="110" placeholder="years"></div>
+    <div><span class="q" style="display:block;font-size:14px;font-weight:600;margin-bottom:4px">Wears distance glasses all day?</span>
+      <div class="seg"><label><input type="radio" name="allday" value="yes">Yes</label><label><input type="radio" name="allday" value="no">No</label><label><input type="radio" name="allday" value="na" checked>N/A</label></div></div>
+    <div><span class="q" style="display:block;font-size:14px;font-weight:600;margin-bottom:4px">Takes them off to read?</span>
+      <div class="seg"><label><input type="radio" name="offread" value="yes">Yes</label><label><input type="radio" name="offread" value="no">No</label><label><input type="radio" name="offread" value="na" checked>N/A</label></div></div>
+  </div>
+  <details>
+    <summary>Lenses &amp; health (tick anything that applies)</summary>
+    <div class="checks">
+      <label><input type="checkbox" data-k="stop" data-r="Progressive, bifocal or multifocal lenses"> Progressive, bifocal or multifocal glasses / contact lenses<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="stop" data-r="Monovision"> Monovision (one eye for distance, one for near)<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="stop" data-r="Eye disease"> Eye disease (glaucoma, cataract, macular degeneration, diabetic eye disease, keratoconus, retinal disease)<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="stop" data-r="Cataract surgery / lens implant"> Cataract surgery / lens implant<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="stop" data-r="Lazy eye, turning eye or eye-muscle surgery"> Lazy eye, turning eye or eye-muscle surgery<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="stop" data-r="Neurological condition"> Stroke, epilepsy / seizures, MS, Parkinson’s, brain injury<span class="tag stop">STOP</span></label>
+      <label><input type="checkbox" data-k="check" data-r="One eye sees clearly worse"> One eye sees clearly worse than the other<span class="tag check">CHECK</span></label>
+      <label><input type="checkbox" data-k="check" data-r="Past laser eye surgery (LASIK/PRK)"> Past laser eye surgery (LASIK / PRK)<span class="tag check">CHECK</span></label>
+      <label><input type="checkbox" data-k="check" data-r="Other eye treatment or prescribed drops"> Other eye treatment or prescribed eye drops<span class="tag check">CHECK</span></label>
+      <label><input type="checkbox" data-k="check" data-r="Eye patching as a child"> Eye patching as a child<span class="tag check">CHECK</span></label>
+      <label><input type="checkbox" data-k="check" data-r="Other medical or neurological condition"> Other medical or neurological condition<span class="tag check">CHECK</span></label>
+    </div>
+  </details>
+  <button class="primary" id="go">Check eligibility</button>
+</section>
+
+<section class="card" id="result" aria-live="polite">
+  <p id="verdict"></p>
+  <ul id="reasons"></ul>
+  <p id="reminder"></p>
+  <button class="link" id="reset">Start a new customer</button>
+</section>
+
+<footer>Based on the Oryx–Eligibility Guide. A screening aid for the sales team – the company optometrist has the final say.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------- numbers ---------- */
+function num(v){
+  if(v==null) return null;
+  let s=String(v).trim().replace(/[−–—]/g,'-').replace(',', '.').replace(/\s+/g,'');
+  if(s==='') return null;
+  if(/^(pl|plano|pln|0)$/i.test(s)) return 0;
+  const n=parseFloat(s);
+  return isNaN(n)?null:n;
+}
+const fmt = n => n==null ? '—' : (n>0?'+':n<0?'−':'')+Math.abs(n).toFixed(2);
+
+/* ---------- eligibility rules (Oryx–Eligibility Guide) ---------- */
+function evaluate(d){
+  const stop=[], check=[], ok=[];
+  const {age, sphR, sphL, cylR, cylL, add, allday, offread, flags} = d;
+
+  if(age==null) check.push('Age not entered');
+  else if(age<35) stop.push(`Age ${age} – under 35`);
+  else if(age>60) check.push(`Age ${age} – over 60`);
+
+  flags.filter(f=>f.k==='stop').forEach(f=>stop.push(f.r));
+  flags.filter(f=>f.k==='check').forEach(f=>check.push(f.r));
+
+  const eyes=[['Right',sphR],['Left',sphL]];
+  const addv = add==null?0:add;
+  for(const [eye,s] of eyes){
+    if(s==null || (s<=0 && s>=-0.25)) continue;                     // none / 0.00 to −0.25
+    if(s < -6.00) { stop.push(`${eye} SPH ${fmt(s)} – stronger than −6.00`); continue; }
+    if(s > 2.00)  { stop.push(`${eye} SPH ${fmt(s)} – above +2.00`); continue; }
+    if(s <= -3.00) continue;                                          // −3.00 to −6.00
+    if(s < -0.25){                                                    // −0.50 to −2.75
+      if(offread==='yes') stop.push(`${eye} SPH ${fmt(s)} and takes glasses off to read`);
+      else if(offread!=='no') check.push(`${eye} SPH ${fmt(s)} – ask whether they take their glasses off to read`);
+      continue;
+    }
+    if(s <= 0.75) continue;                                           // +0.25 to +0.75
+    // +1.00 to +2.00
+    if(allday==='yes') continue;
+    if(s + addv <= 1.75) continue;
+    check.push(`${eye} SPH ${fmt(s)} not worn all day, SPH + ADD = ${fmt(s+addv)} (above +1.75)`);
+  }
+
+  for(const [eye,c] of [['Right',cylR],['Left',cylL]]){
+    if(c!=null && Math.abs(c) > 0.50) check.push(`${eye} CYL ${fmt(c)} – above 0.50`);
+  }
+  if(add!=null && add >= 2.00) check.push(`ADD ${fmt(add)} – +2.00 or higher`);
+  if(sphR!=null || sphL!=null){
+    const diff=Math.abs((sphR??0)-(sphL??0));
+    if(diff>1.00) check.push(`Difference between eyes ${diff.toFixed(2)} – above 1.00`);
+  }
+
+  if(stop.length) return {level:'bad', title:'✘ Not suitable', reasons:stop.concat(check)};
+  if(check.length) return {level:'check', title:'? Refer to the optometrist', reasons:check};
+  return {level:'ok', title:'✔ Suitable for training', reasons:['All values are within the eligibility guide.']};
+}
+
+/* ---------- prescription text parsing ---------- */
+function parseRx(raw){
+  const text=raw.replace(/[−–—]/g,'-').replace(/(\d),(\d{2})/g,'$1.$2').replace(/(^|[^\w.])0\s*\.?\s*([SD])\b/g,'$1O$2').replace(/\bO\s*\.?\s*D\s*\.?/gi,'OD').replace(/\bO\s*\.?\s*S\s*\.?/gi,'OS');
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const dec=/([+-]?\s?\d{1,2}\.\d{2})|\b(pl(?:ano)?)\b/gi;
+  const nums=l=>[...l.matchAll(dec)].map(m=>m[2]?0:parseFloat(m[1].replace(/\s/g,'')));
+  const out={};
+  const rRe=/(^|[^a-z])(od|r|re|rt|right|ימין)([^a-z]|$)/i, lRe=/(^|[^a-z])(os|l|le|lt|left|שמאל)([^a-z]|$)/i;
+  let adds=[];
+  for(const l of lines){
+    const am=l.match(/add(?:ition)?[^0-9+\-]{0,8}([+-]?\s?\d{1,2}\.\d{2})/i);
+    if(am) adds.push(parseFloat(am[1].replace(/\s/g,'')));
+    const isR=rRe.test(l), isL=lRe.test(l);
+    if(isR===isL) continue;
+    const ns=nums(l.replace(/add(?:ition)?[^0-9+\-]{0,8}[+-]?\s?\d{1,2}\.\d{2}/i,''));
+    if(!ns.length) continue;
+    const e=isR?'R':'L';
+    if(out['sph'+e]!==undefined) continue;
+    out['sph'+e]=ns[0];
+    if(/\bDS\b|sph(?:ere)?\s*only/i.test(l)) out['cyl'+e]=null;
+    else if(ns.length>1) out['cyl'+e]=ns[1];
+    if(ns.length>2 && !am) adds.push(ns[2]);
+  }
+  if(adds.length) out.add=Math.max(...adds);
+  return out;
+}
+
+/* ---------- file reading ---------- */
+const status=(t,err)=>{const s=$('status');s.textContent=t;s.className='status'+(err?' err':'');};
+const prog=$('prog');
+
+async function fileToCanvases(file){
+  const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+  if(isPdf){
+    if(!window.pdfjsLib) throw new Error('PDF reader did not load – check the internet connection.');
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const pages=[];
+    for(let i=1;i<=Math.min(pdf.numPages,3);i++){
+      const page=await pdf.getPage(i);
+      const vp=page.getViewport({scale:2.5});
+      const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+      await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      pages.push(c);
+    }
+    return pages;
+  }
+  const url=URL.createObjectURL(file);
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('This image format cannot be opened in the browser. Please save it as JPG, PNG or PDF (e.g. iPhone HEIC photos).'));i.src=url;});
+  const scale=Math.min(1, 2400/Math.max(img.naturalWidth,img.naturalHeight)) * (Math.max(img.naturalWidth,img.naturalHeight)<1200?2:1);
+  const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*scale);c.height=Math.round(img.naturalHeight*scale);
+  const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
+  URL.revokeObjectURL(url);
+  return [c];
+}
+
+let worker=null;
+async function getWorker(){
+  if(worker) return worker;
+  if(!window.Tesseract) throw new Error('Text reader did not load – check the internet connection.');
+  worker=await Tesseract.createWorker('eng',1,{
+    workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+    corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+    langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
+    logger:m=>{ if(m.status==='recognizing text'){prog.hidden=false;prog.value=m.progress;} }
+  });
+  return worker;
+}
+
+async function handleFile(file){
+  if(!file) return;
+  $('preview').innerHTML='';$('preview').style.display='block';
+  status('Opening the file…');
+  try{
+    const canvases=await fileToCanvases(file);
+    const shown=document.createElement('img');shown.alt='Uploaded prescription';shown.src=canvases[0].toDataURL('image/jpeg',.85);
+    $('preview').appendChild(shown);
+    status('Reading the prescription… (the first time takes a few seconds)');
+    const w=await getWorker();
+    let text='';
+    for(const c of canvases){ const r=await w.recognize(c); text+=r.data.text+'\n'; }
+    prog.hidden=true;
+    $('ocr').textContent=text.trim()||'(no text found)';
+    const rx=parseRx(text);
+    const fields={sphR:'sphR',sphL:'sphL',cylR:'cylR',cylL:'cylL',add:'add'};
+    let found=0;
+    for(const k in fields){ const el=$(fields[k]); if(k in rx){ el.value=rx[k]==null?'':fmt(rx[k]); found++; } }
+    status(found ? `Found ${found} value${found>1?'s':''}. Please check them against the prescription in step 2.` : 'Could not find the numbers automatically – please type them in step 2.', !found);
+  }catch(e){
+    prog.hidden=true;
+    status((e&&e.message)||'Could not read this file – please type the values in step 2.', true);
+  }
+}
+
+const drop=$('drop');
+$('file').addEventListener('change',e=>handleFile(e.target.files[0]));
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click();}});
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>handleFile(e.dataTransfer.files[0]));
+
+/* ---------- check ---------- */
+$('go').addEventListener('click',()=>{
+  const radio=n=>document.querySelector(`input[name=${n}]:checked`).value;
+  const flags=[...document.querySelectorAll('.checks input:checked')].map(i=>({k:i.dataset.k,r:i.dataset.r}));
+  const ageV=$('age').value.trim();
+  const res=evaluate({
+    age: ageV===''?null:Number(ageV),
+    sphR:num($('sphR').value), sphL:num($('sphL').value),
+    cylR:num($('cylR').value), cylL:num($('cylL').value),
+    add:num($('add').value), allday:radio('allday'), offread:radio('offread'), flags
+  });
+  const box=$('result');
+  box.className='card '+res.level;box.style.display='block';
+  $('verdict').textContent=res.title;
+  $('reasons').innerHTML='';res.reasons.forEach(r=>{const li=document.createElement('li');li.textContent=r;$('reasons').appendChild(li);});
+  $('reminder').textContent = res.level==='bad' ? 'Decline politely.' :
+    res.level==='check' ? 'Do not sell yet – book a short check with the company optometrist.' :
+    'Remind the customer: training must be done with their distance glasses or contact lenses (if they wear them), and without reading glasses, progressive, bifocal or multifocal lenses.';
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+});
+$('reset').addEventListener('click',()=>{location.reload();});
+
+window.__oryx={evaluate,parseRx,num};
+</script>
+</body>
+</html>
